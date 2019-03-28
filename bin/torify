@@ -1,0 +1,3 @@
+#!/bin/bash
+
+sudo iptables-restore < /etc/iptables/tor_full_rules.v4

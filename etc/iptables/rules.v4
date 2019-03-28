@@ -1,0 +1,77 @@
+*filter
+# Allow all outgoing, but drop incoming and forwarding packets by default
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# Custom per-protocol chains
+:UDP - [0:0]
+:TCP - [0:0]
+:ICMP - [0:0]
+
+# Acceptable UDP traffic
+-A UDP -p udp -i wlan0 --dport 53 -j ACCEPT
+-A UDP -p udp -i wlan0 --dport 67 -j ACCEPT
+-A UDP -p udp -i eth0 --dport 53 -j ACCEPT
+
+# Acceptable TCP traffic
+-A TCP -p tcp -i wlan0 --dport 5522 -j ACCEPT
+-A TCP -p tcp -i wlan0 --dport 53 -j ACCEPT
+-A TCP -p tcp -i eth0 --dport 5522 -j ACCEPT
+-A TCP -p tcp -i eth0 --dport 53 -j ACCEPT
+
+# Acceptable ICMP traffic
+
+# Boilerplate acceptance policy
+-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+
+# Drop invalid packets
+-A INPUT -m conntrack --ctstate INVALID -j DROP
+
+# Pass traffic to protocol-specific chains
+## Only allow new connections (established and related should already be handled)
+## For TCP, additionally only allow new SYN packets since that is the only valid
+## method for establishing a new TCP connection
+-A INPUT -p udp -m conntrack --ctstate NEW -j UDP
+-A INPUT -p tcp --syn -m conntrack --ctstate NEW -j TCP
+-A INPUT -p icmp -m conntrack --ctstate NEW -j ICMP
+
+# Reject anything that's fallen through to this point
+## Try to be protocol-specific w/ rejection message
+-A INPUT -p udp -j REJECT --reject-with icmp-port-unreachable
+-A INPUT -p tcp -j REJECT --reject-with tcp-reset
+-A INPUT -j REJECT --reject-with icmp-proto-unreachable
+
+-A FORWARD -i wwan0 -o wlan0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -i wlan0 -o wwan0 -j ACCEPT
+-A FORWARD -i wwan0 -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT
+-A FORWARD -i eth0 -o wwan0 -j ACCEPT
+
+# Commit the changes
+COMMIT
+
+*raw
+:PREROUTING ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+COMMIT
+
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+-A POSTROUTING -s 172.24.1.0/24 -o wwan0 -j MASQUERADE
+-A POSTROUTING -s 172.24.2.0/24 -o wwan0 -j MASQUERADE
+
+COMMIT
+
+
+*mangle
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+COMMIT
